@@ -1,0 +1,49 @@
+name: Build Psych Pedalboard
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  engine-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and run engine tests
+        run: |
+          g++ -O2 -std=c++17 -Wall -Wextra -ISource -Itests tests/test_engine.cpp -o engine_tests
+          ./engine_tests
+      - name: Render demo audio
+        run: |
+          g++ -O2 -std=c++17 -ISource -Itests tools/render_demo.cpp -o render_demo
+          ./render_demo demo_presets.wav
+      - uses: actions/upload-artifact@v4
+        with:
+          name: demo-audio
+          path: demo_presets.wav
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -B build -G Xcode -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release --target PsychPedalboard_AU PsychPedalboard_VST3
+
+      - name: Ad-hoc sign and package
+        run: |
+          mkdir -p dist
+          cp -R "build/PsychPedalboard_artefacts/Release/AU/Psych Pedalboard.component" dist/
+          cp -R "build/PsychPedalboard_artefacts/Release/VST3/Psych Pedalboard.vst3" dist/
+          codesign --force --deep -s - "dist/Psych Pedalboard.component"
+          codesign --force --deep -s - "dist/Psych Pedalboard.vst3"
+          ditto -c -k --keepParent dist PsychPedalboard-macOS.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PsychPedalboard-macOS
+          path: PsychPedalboard-macOS.zip
